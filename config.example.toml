@@ -1,0 +1,59 @@
+# voice-type 配置。复制为 config.toml (setup.sh 会自动复制)。
+# 查找顺序: $VOICE_TYPE_CONFIG > 项目目录/config.toml > ~/.config/voice-type/config.toml
+# 没写的项使用内置默认值。
+
+[hotkey]
+# 按一下开始说话、再按一下结束并输入。默认右 Alt。
+# 若要改回左 Alt: key = "KEY_LEFTALT"
+# 其他可选: "KEY_RIGHTCTRL", "KEY_CAPSLOCK", "KEY_SCROLLLOCK", "KEY_F8" ...
+key = "KEY_RIGHTALT"
+# 兼容项，开关模式下不使用（动作发生在按键松开时）
+min_hold_ms = 0
+# "auto" (先 evdev，X11 下退回 pynput) | "evdev" | "pynput"(仅 X11)
+backend = "auto"
+
+[audio]
+sample_rate = 16000
+device = ""          # 空 = 系统默认麦克风；可填 ./voice-type --list-devices 里的编号或名称
+max_seconds = 120
+min_rms = 0.002      # 低于此音量视为没说话
+
+[asr]
+engine = "local"     # "local" 离线(默认) | "cloud" 云端(还需打开下面的 [cloud].enabled)
+model_dir = "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17"
+language = "zh"      # "zh" 中文优先(夹英文单词也能识别) | "auto" 自动 | "en" | "yue" 粤语
+num_threads = 2      # 机器很弱就改 1
+use_itn = true       # 自动加标点、数字写成阿拉伯数字
+
+[cleanup]
+enabled = true       # 只去口头禅和重复，不改写原话
+remove_fillers = true
+remove_repeats = true
+
+[insert]
+# "auto" | "xdotool"(X11) | "wtype"(Wayland 非 GNOME) | "ydotool"(GNOME Wayland) | "clipboard"(只复制，自己按 Ctrl+V)
+backend = "auto"
+restore_clipboard = true                  # 粘贴后恢复原来的剪贴板文字
+paste_shortcut = "ctrl+v"
+terminal_paste_shortcut = "ctrl+shift+v"  # X11 下检测到终端窗口时使用
+trailing_space = false
+
+[ui]
+overlay = true       # 在屏幕底部居中显示圆角语音条（录音中带声音波动 / 识别中）
+overlay_offset_x = 16  # 仅简易语音条（系统没有 python3-gi 时）使用：相对鼠标的偏移
+overlay_offset_y = 24
+notify = true        # 额外的系统通知（右上角），可关
+sound = true         # 开始/结束时短促提示音
+
+# ---------------------------------------------------------------------------
+# 云端识别 —— 默认关闭。以后觉得小模型不够准再打开。
+# 打开后录音会上传到下面的服务商。需要同时设置 [asr].engine = "cloud"。
+# 支持任意 OpenAI 兼容的 /audio/transcriptions 接口 (Groq / OpenAI / 自建)。
+# API Key 只从环境变量读取，不要写进这个文件:  export VOICE_TYPE_API_KEY=...
+[cloud]
+enabled = false
+base_url = "https://api.groq.com/openai/v1"   # OpenAI: "https://api.openai.com/v1"
+model = "whisper-large-v3-turbo"              # OpenAI: "whisper-1" 或 "gpt-4o-mini-transcribe"
+api_key_env = "VOICE_TYPE_API_KEY"
+timeout_s = 30
+fallback_to_local = true                      # 断网/出错时自动用本地模型

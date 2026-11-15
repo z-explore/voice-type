@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Launcher: runs the app from the project venv.
+DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+export PYTHONPATH="$DIR${PYTHONPATH:+:$PYTHONPATH}"
+exec "$DIR/.venv/bin/python" -m voice_type "$@"

@@ -1,0 +1,8 @@
+# Alternative to systemd: copy to ~/.config/autostart/ and fix the Exec path.
+[Desktop Entry]
+Type=Application
+Name=voice-type
+Comment=Offline push-to-talk dictation
+Exec=/path/to/voice-type/voice-type
+X-GNOME-Autostart-enabled=true
+NoDisplay=true

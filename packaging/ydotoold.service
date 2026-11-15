@@ -1,0 +1,10 @@
+# ydotool daemon as a user service (Ubuntu 24.04 ydotool 1.x needs it; 22.04's 0.1.x does not).
+[Unit]
+Description=ydotool daemon (virtual input for voice-type paste on Wayland)
+
+[Service]
+ExecStart=/usr/bin/ydotoold
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

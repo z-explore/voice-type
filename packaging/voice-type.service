@@ -1,0 +1,18 @@
+# systemd *user* service: starts voice-type when you log in to the desktop.
+# Install with scripts/install_service.sh (fills in @PROJECT_DIR@), or by hand:
+#   sed "s|@PROJECT_DIR@|$PWD|" packaging/voice-type.service > ~/.config/systemd/user/voice-type.service
+#   systemctl --user daemon-reload && systemctl --user enable --now voice-type
+[Unit]
+Description=voice-type offline push-to-talk dictation
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=@PROJECT_DIR@/voice-type
+Restart=on-failure
+RestartSec=3
+# 3 = another instance is already running
+RestartPreventExitStatus=3
+
+[Install]
+WantedBy=graphical-session.target

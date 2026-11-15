@@ -1,0 +1,7 @@
+# Tested on Python 3.13 (Debian box). Targets Ubuntu 22.04 (Py 3.10) / 24.04 (Py 3.12).
+sherpa-onnx==2.0.1          # offline ASR runtime (ONNX), CPU only
+numpy>=1.24,<3
+sounddevice>=0.4.6,<0.6     # needs system libportaudio2
+evdev>=1.6,<2               # global hotkey on X11 + Wayland (needs python3-dev + gcc to build)
+pynput>=1.7.6,<2            # X11 fallback hotkey listener
+tomli>=2.0; python_version < "3.11"
