@@ -3,3 +3,7 @@ models/
 config.toml
 __pycache__/
 .pytest_cache/
+dist/
+build/
+*.spec.bak
+*.log

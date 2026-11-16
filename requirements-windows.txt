@@ -1,0 +1,7 @@
+# Windows portable / source install (no evdev).
+sherpa-onnx==2.0.1
+numpy>=1.24,<3
+sounddevice>=0.4.6,<0.6
+pynput>=1.7.6,<2
+pywin32>=306
+tomli>=2.0; python_version < "3.11"

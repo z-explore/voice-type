@@ -39,7 +39,7 @@ if ! .venv/bin/pip install -r requirements.txt; then
 fi
 
 echo "== model =="
-bash scripts/download_model.sh
+python3 scripts/download_model.py || bash scripts/download_model.sh
 
 [[ -f config.toml ]] || { cp config.example.toml config.toml; echo "created config.toml"; }
 chmod +x voice-type

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import resource
 import sys
 import time
 
@@ -12,11 +11,18 @@ from .config import load_config
 
 
 def _rss_mb() -> float:
-    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0  # Linux: KiB -> MiB (peak)
+    try:
+        import resource
+        rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        if sys.platform == "darwin":
+            return rss / (1024.0 * 1024.0)
+        return rss / 1024.0  # Linux: KiB -> MiB
+    except Exception:
+        return 0.0
 
 
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(prog="voice-type", description="离线按住说话语音输入 (Linux)")
+    p = argparse.ArgumentParser(prog="voice-type", description="离线语音输入 (Linux / Windows)")
     p.add_argument("-c", "--config", help="config.toml 路径")
     p.add_argument("-v", "--verbose", action="store_true")
     p.add_argument("--transcribe-file", metavar="WAV", help="识别一个 16-bit wav 文件并打印 (测试用)")
@@ -83,9 +89,19 @@ _lock_file = None
 def _single_instance() -> bool:
     """Two instances would insert every sentence twice. Exit code 3 = already running
     (the systemd unit uses RestartPreventExitStatus=3 so it does not retry)."""
-    import fcntl
     import os
     global _lock_file
+    if sys.platform == "win32":
+        from .platform_util import user_data_dir
+        path = user_data_dir() / "voice-type.lock"
+        _lock_file = open(path, "a+b")
+        try:
+            import msvcrt
+            msvcrt.locking(_lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError:
+            return False
+        return True
+    import fcntl
     run_dir = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
     _lock_file = open(os.path.join(run_dir, "voice-type.lock"), "w")
     try:

@@ -16,11 +16,14 @@ _TITLES = {"recording": "🎙 录音中…", "transcribing": "⏳ 识别中…",
 
 class Status:
     def __init__(self, cfg: dict, level_fn=None):
+        import sys
         ui = cfg.get("ui", {})
         self.notify = ui.get("notify", True) and shutil.which("notify-send") is not None
         self.sound = ui.get("sound", True)
+        # Overlay is a Linux X11/GTK capsule; skip on Windows portable builds.
+        overlay_on = bool(ui.get("overlay", True)) and not sys.platform.startswith("win")
         self.bar = VoiceBar(
-            enabled=ui.get("overlay", True),
+            enabled=overlay_on,
             offset_x=int(ui.get("overlay_offset_x", 16)),
             offset_y=int(ui.get("overlay_offset_y", 24)),
             level_fn=level_fn,
