@@ -16,6 +16,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 import time
 
 log = logging.getLogger("voice_type.insert")
@@ -37,6 +38,8 @@ def _run(args, inp: str | None = None, timeout: float = 3.0) -> subprocess.Compl
 
 
 def session_type() -> str:
+    if sys.platform == "win32":
+        return "win32"
     if os.environ.get("WAYLAND_DISPLAY") or os.environ.get("XDG_SESSION_TYPE") == "wayland":
         return "wayland"
     if os.environ.get("DISPLAY"):
@@ -135,6 +138,8 @@ class Inserter:
     def pick_backend(self) -> str:
         if self.backend != "auto":
             return self.backend
+        if self.session == "win32":
+            return "win32"
         if self.session == "x11":
             return "xdotool" if _has("xdotool") and (_has("xclip") or _has("xsel")) else "clipboard"
         if self.session == "wayland":
@@ -147,6 +152,56 @@ class Inserter:
             return "clipboard"
         return "print"
 
+    def _win32_clip_get(self) -> str | None:
+        try:
+            import win32clipboard
+            import win32con
+            win32clipboard.OpenClipboard()
+            try:
+                if win32clipboard.IsClipboardFormatAvailable(win32con.CF_UNICODETEXT):
+                    return win32clipboard.GetClipboardData(win32con.CF_UNICODETEXT)
+            finally:
+                win32clipboard.CloseClipboard()
+        except Exception as e:
+            log.debug("win32 clipboard get failed: %s", e)
+        return None
+
+    def _win32_clip_set(self, text: str) -> bool:
+        try:
+            import win32clipboard
+            import win32con
+            win32clipboard.OpenClipboard()
+            try:
+                win32clipboard.EmptyClipboard()
+                win32clipboard.SetClipboardData(win32con.CF_UNICODETEXT, text)
+            finally:
+                win32clipboard.CloseClipboard()
+            return True
+        except Exception as e:
+            log.debug("win32 clipboard set failed: %s", e)
+            return False
+
+    def _win32_paste(self, text: str) -> str:
+        old = self._win32_clip_get() if self.restore else None
+        if not self._win32_clip_set(text):
+            log.error("无法写入剪贴板，文本: %s", text)
+            print(text, flush=True)
+            return "print"
+        time.sleep(0.05)
+        try:
+            from pynput.keyboard import Controller, Key
+            kb = Controller()
+            with kb.pressed(Key.ctrl):
+                kb.press("v")
+                kb.release("v")
+        except Exception as e:
+            log.warning("Windows 自动粘贴失败，文字已复制，请手动 Ctrl+V: %s", e)
+            return "clipboard"
+        if old is not None and self.restore:
+            time.sleep(0.4)
+            self._win32_clip_set(old)
+        return "win32"
+
     def insert(self, text: str) -> str:
         """Returns the method actually used ("print" means no display - text only logged)."""
         if not text:
@@ -157,6 +212,8 @@ class Inserter:
         if b == "print":
             print(text, flush=True)
             return "print"
+        if b == "win32":
+            return self._win32_paste(text)
         if b == "wtype" and self._wtype(text):
             return "wtype"
         old = self._clip_get() if self.restore else None

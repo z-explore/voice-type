@@ -11,61 +11,69 @@ if sys.version_info >= (3, 11):
 else:  # Ubuntu 22.04 ships Python 3.10
     import tomli as tomllib
 
-PROJECT_DIR = Path(__file__).resolve().parent.parent
+from .platform_util import project_dir
+
+PROJECT_DIR = project_dir()
 MODEL_DIRNAME = "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17"
 
-DEFAULTS: dict = {
-    "hotkey": {
-        # evdev key name. KEY_LEFTALT = 左 Alt, KEY_RIGHTALT = 右 Alt
-        "key": "KEY_RIGHTALT",
-        # Hold shorter than this = treated as a plain Alt tap, ignored.
-        "min_hold_ms": 300,
-        # Hotkey listener: "auto" | "evdev" (X11+Wayland, needs input group) | "pynput" (X11 only)
-        "backend": "auto",
-    },
-    "audio": {
-        "sample_rate": 16000,
-        "device": "",          # "" = system default input; or a name/index from --list-devices
-        "max_seconds": 120,
-        "min_rms": 0.002,      # below this the clip is treated as silence
-    },
-    "asr": {
-        "engine": "local",     # "local" (default, offline) | "cloud" (see [cloud])
-        "model_dir": str(PROJECT_DIR / "models" / MODEL_DIRNAME),
-        "language": "zh",      # "zh" | "auto" (better for heavy zh+en mixing) | "en" | "yue" ...
-        "num_threads": 2,
-        "use_itn": True,       # punctuation + numbers as digits
-    },
-    "cleanup": {
-        "enabled": True,
-        "remove_fillers": True,
-        "remove_repeats": True,
-    },
-    "insert": {
-        # "auto" | "xdotool" | "wtype" | "ydotool" | "clipboard" (copy only, you press Ctrl+V)
-        "backend": "auto",
-        "restore_clipboard": True,
-        "paste_shortcut": "ctrl+v",
-        "terminal_paste_shortcut": "ctrl+shift+v",
-        "trailing_space": False,
-    },
-    "ui": {
-        "notify": True,        # desktop notification via notify-send
-        "sound": True,         # short beep on start/stop
-        "overlay": True,       # floating voice bar near the mouse pointer
-        "overlay_offset_x": 16,
-        "overlay_offset_y": 24,
-    },
-    "cloud": {
-        # DISABLED by default. OpenAI-compatible /v1/audio/transcriptions endpoint.
-        "enabled": False,
-        "base_url": "https://api.groq.com/openai/v1",
-        "model": "whisper-large-v3-turbo",
-        "api_key_env": "VOICE_TYPE_API_KEY",  # key is read from this env var, never stored here
-        "timeout_s": 30,
-        "fallback_to_local": True,
-    },
-}
+
+def _defaults() -> dict:
+    root = project_dir()
+    return {
+        "hotkey": {
+            # evdev / pynput key name. Linux & Windows default: Right Alt
+            "key": "KEY_RIGHTALT",
+            # Hold shorter than this = treated as a plain Alt tap, ignored.
+            "min_hold_ms": 300,
+            # "auto" | "evdev" (Linux) | "pynput" (Windows / X11 fallback)
+            "backend": "auto",
+        },
+        "audio": {
+            "sample_rate": 16000,
+            "device": "",          # "" = system default input; or a name/index from --list-devices
+            "max_seconds": 120,
+            "min_rms": 0.002,      # below this the clip is treated as silence
+        },
+        "asr": {
+            "engine": "local",     # "local" (default, offline) | "cloud" (see [cloud])
+            "model_dir": str(root / "models" / MODEL_DIRNAME),
+            "language": "zh",      # "zh" | "auto" (better for heavy zh+en mixing) | "en" | "yue" ...
+            "num_threads": 2,
+            "use_itn": True,       # punctuation + numbers as digits
+        },
+        "cleanup": {
+            "enabled": True,
+            "remove_fillers": True,
+            "remove_repeats": True,
+        },
+        "insert": {
+            # "auto" | "win32" | "xdotool" | "wtype" | "ydotool" | "clipboard"
+            "backend": "auto",
+            "restore_clipboard": True,
+            "paste_shortcut": "ctrl+v",
+            "terminal_paste_shortcut": "ctrl+shift+v",
+            "trailing_space": False,
+        },
+        "ui": {
+            "notify": True,        # desktop notification via notify-send (Linux)
+            "sound": True,         # short beep on start/stop
+            "overlay": True,       # floating voice bar (Linux; ignored on Windows for now)
+            "overlay_offset_x": 16,
+            "overlay_offset_y": 24,
+        },
+        "cloud": {
+            # DISABLED by default. OpenAI-compatible /v1/audio/transcriptions endpoint.
+            "enabled": False,
+            "base_url": "https://api.groq.com/openai/v1",
+            "model": "whisper-large-v3-turbo",
+            "api_key_env": "VOICE_TYPE_API_KEY",  # key is read from this env var, never stored here
+            "timeout_s": 30,
+            "fallback_to_local": True,
+        },
+    }
+
+
+DEFAULTS: dict = _defaults()
 
 
 def _merge(base: dict, override: dict) -> dict:
@@ -82,9 +90,14 @@ def default_config_path() -> Path:
     env = os.environ.get("VOICE_TYPE_CONFIG")
     if env:
         return Path(env).expanduser()
-    local = PROJECT_DIR / "config.toml"
+    root = project_dir()
+    local = root / "config.toml"
     if local.exists():
         return local
+    if sys.platform == "win32":
+        import os as _os
+        base = Path(_os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+        return base / "voice-type" / "config.toml"
     xdg = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     return xdg / "voice-type" / "config.toml"
 
@@ -95,10 +108,15 @@ def load_config(path: str | os.PathLike | None = None) -> dict:
     if p.exists():
         with open(p, "rb") as f:
             user = tomllib.load(f)
-    cfg = _merge(DEFAULTS, user)
+    cfg = _merge(_defaults(), user)
+    root = project_dir()
     md = Path(cfg["asr"]["model_dir"]).expanduser()
     if not md.is_absolute():
-        md = PROJECT_DIR / md
+        md = root / md
+    # Frozen packages always prefer models/ next to the executable when present.
+    bundled = root / "models" / MODEL_DIRNAME
+    if (bundled / "model.int8.onnx").exists():
+        md = bundled
     cfg["asr"]["model_dir"] = str(md)
     cfg["_path"] = str(p) if p.exists() else None
     return cfg

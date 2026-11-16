@@ -1,13 +1,26 @@
-# voice-type：Ubuntu 离线语音输入（按一下右 Alt 说话）
+# voice-type：离线语音输入（按一下右 Alt 说话）
 
-一个轻量的系统级语音输入工具，思路类似 Typeless，但专为内存不大的 Ubuntu 电脑设计：
+一个轻量的系统级语音输入工具（Linux / Windows）。**一个源码仓库，两套 Release 包**——按系统下载对应包即可，包里不混入另一边的脚本。
 
-- **按一下右 Alt 开始说话，再按一下结束，并把文字打到当前光标处**（任意软件：浏览器、微信网页版、编辑器、终端……）。
-- **录音时屏幕底部居中会出现一个黑色小胶囊**（参考 Typeless）：浅色竖条跟着声音跳动，安静时是一排静止的小点；之后显示“识别中…”，文字输入后自动消失。语音条没有按钮，鼠标可以直接穿过。系统没有 `python3-gi` 时退回到鼠标旁的简易语音条。
-- **完全离线**：第一次安装时下载一个小模型（约 163 MB 下载、解压后约 230 MB），之后不联网也能用。
-- **中文优先**，中英夹杂（比如“用 Python 写个 demo”）也能识别；自动加标点。
-- **只做保守清理**：去掉“呃、嗯、啊”这类口头禅和“我觉得我觉得”这类重复，**不改写、不润色你的原话**。
-- 没有账号、没有遥测、不上传任何数据（云端识别默认关闭，见最后一节）。
+- **按一下右 Alt 开始说话，再按一下结束，并把文字打到当前光标处**。
+- **Linux**：底部黑色语音胶囊（参考 Typeless）；Wayland / X11 均可。
+- **Windows**：剪贴板 + Ctrl+V 插字；便携 zip，装完即可用。
+- **完全离线**小模型；中文优先；只做保守清理；无账号无遥测。
+
+## 0. 用户：下载 Release（推荐）
+
+到 GitHub **Releases** 按系统下载（打 `v*` 标签或手动跑 Actions 后会出现）：
+
+| 系统 | 文件 | 用法 |
+|------|------|------|
+| Windows 10/11 | `voice-type-windows.zip` | 解压 → 右键 `Install.ps1` 用 PowerShell 运行 → 允许麦克风 → 右 Alt |
+| Ubuntu 22.04/24.04 | `voice-type-linux.tar.gz` | 解压 → `bash install.sh` → 重新登录 → `./voice-type` → 右 Alt |
+
+每个包都自带模型与默认 `config.toml`，**不用再装 Python / 不用再下模型**。Windows 包不含 `.sh`/systemd；Linux 包不含 `.ps1`/`.bat`。
+
+> 不需要、也不维护 `windows` / `linux` 两条长期分支：源码按运行时系统自适配，整洁靠 **Release 产物拆分**。
+
+开发者若要改代码，再用下面的源码安装。
 
 ## 1. 用的是什么模型，为什么
 
@@ -31,31 +44,28 @@
 
 经验上：2 GB 以上可用内存、任意近十年的 x86-64 CPU 应该够用；CPU 很弱就把 `num_threads` 设为 1。
 
-## 2. 安装（Ubuntu 22.04 / 24.04）
+## 2. 源码安装（开发者）
+
+### 2a. Linux（Ubuntu 22.04 / 24.04）
 
 ```bash
-# 把项目放到 ~/voice-type（后面的开机自启默认用这个路径）
 cd ~/voice-type
 ./setup.sh --permissions
-```
-
-`setup.sh` 会做这些事（需要输入 sudo 密码）：
-
-1. 用 apt 安装：`libportaudio2`（录音）、`xdotool xclip`（X11 插字）、`wl-clipboard wtype ydotool`（Wayland 插字）、`libnotify-bin`（桌面提示）、`python3-gi gir1.2-gtk-3.0`（底部圆角语音条）、`python3-tk`（简易语音条）、`python3-venv python3-dev gcc bzip2` 等；
-2. 建虚拟环境 `.venv`，安装 Python 依赖（`requirements.txt`）；
-3. 下载模型到 `models/`，并做 SHA-256 校验；
-4. 生成 `config.toml`；
-5. 加上 `--permissions` 时还会：把你加入 `input` 组、给 `/dev/uinput` 加 udev 规则、启用 `ydotoold` 用户服务。
-
-**装完后请注销并重新登录一次**（`input` 组要重新登录才生效）。
-
-然后检查环境：
-
-```bash
 ./voice-type --check
 ```
 
-每一行 `[OK ]` 表示没问题，`[!! ]` 的那一行会告诉你缺什么。
+`setup.sh`：apt 依赖、`.venv`、下载模型、可选 input 组 / ydotoold。装完请重新登录。
+
+### 2b. Windows（源码）
+
+1. 安装 [Python 3.10+](https://www.python.org/downloads/windows/)，勾选 **Add to PATH**
+2. 在项目目录：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup-windows.ps1
+```
+
+然后双击桌面快捷方式或 `voice-type.bat`。一般用户请优先用第 0 节的 zip。
 
 ## 3. 使用
 
@@ -167,20 +177,19 @@ API Key 只从环境变量读：`export VOICE_TYPE_API_KEY=...`，不要写进�
 ## 9. 项目结构
 
 ```
-voice_type/
-  __main__.py   命令行入口 (--check / --transcribe-file / --fake-audio ...)
-  app.py        主流程：热键 → 录音 → 识别 → 清理 → 插入
-  hotkey.py     右 Alt 开关式热键（按一下开始、再按一下结束）+ evdev / pynput 监听
-  overlay.py    语音条控制（底部黑色胶囊 / 简易语音条回退）
-  overlay_gtk.py 底部圆角语音条的绘制（用系统 python3 + GTK 运行）
-  audio.py      录音（只在按住时打开麦克风）、提示音
-  asr.py        本地 SenseVoice / 可选云端接口
-  cleanup.py    保守清理规则
-  inserter.py   X11 / Wayland 插入文字
-  notify.py     桌面提示
-tests/          单元测试：.venv/bin/pip install pytest && .venv/bin/python -m pytest -q
-scripts/download_model.sh   下载并校验模型
-packaging/      systemd 服务、ydotoold 服务、自启 .desktop
+voice_type/           运行时（按 sys.platform 分流）
+packaging/
+  windows/            Windows 便携包（仅进 windows.zip）
+  linux/              Linux 便携包（仅进 linux.tar.gz）
+  MANIFEST.md         包内包含/排除清单
+  *.service *.desktop 源码安装用的 Linux 自启（不进 Windows 包）
+scripts/
+  download_model.py   跨平台模型下载
+  setup-windows.ps1   Windows 源码安装
+tests/                仅开发用，不进 Release 包
+.github/workflows/    windows-release.yml / linux-release.yml
 ```
+
+打 tag `v*` 或手动触发上述 Actions，会上传对应平台产物到 Release。
 
 模型许可：SenseVoice 模型遵循 [FunASR 的模型许可](https://github.com/modelscope/FunASR?tab=readme-ov-file#license)（见 `models/<模型目录>/LICENSE`）；sherpa-onnx 为 Apache-2.0。

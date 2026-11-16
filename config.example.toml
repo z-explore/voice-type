@@ -9,7 +9,7 @@
 key = "KEY_RIGHTALT"
 # 兼容项，开关模式下不使用（动作发生在按键松开时）
 min_hold_ms = 0
-# "auto" (先 evdev，X11 下退回 pynput) | "evdev" | "pynput"(仅 X11)
+# "auto" (Linux: 先 evdev，X11 退回 pynput；Windows: pynput) | "evdev" | "pynput"
 backend = "auto"
 
 [audio]
@@ -31,7 +31,7 @@ remove_fillers = true
 remove_repeats = true
 
 [insert]
-# "auto" | "xdotool"(X11) | "wtype"(Wayland 非 GNOME) | "ydotool"(GNOME Wayland) | "clipboard"(只复制，自己按 Ctrl+V)
+# "auto" | "win32"(Windows) | "xdotool"(X11) | "wtype" | "ydotool" | "clipboard"(只复制)
 backend = "auto"
 restore_clipboard = true                  # 粘贴后恢复原来的剪贴板文字
 paste_shortcut = "ctrl+v"

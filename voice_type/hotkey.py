@@ -268,8 +268,14 @@ class PynputListener:
 
 
 def make_listener(cfg: dict, sm: PTTStateMachine, on_action):
+    import sys
     backend = cfg["hotkey"].get("backend", "auto")
     session = os.environ.get("XDG_SESSION_TYPE", "")
+    # Windows: pynput only (no evdev).
+    if sys.platform == "win32":
+        if backend not in ("auto", "pynput"):
+            raise RuntimeError(f"Windows 仅支持 pynput 热键后端，当前: {backend}")
+        return PynputListener(sm, on_action)
     if backend in ("auto", "evdev"):
         ok, why = evdev_available()
         if ok:
