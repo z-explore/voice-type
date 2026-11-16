@@ -54,7 +54,15 @@ cd ~/voice-type
 ./voice-type --check
 ```
 
-`setup.sh`：apt 依赖、`.venv`、下载模型、可选 input 组 / ydotoold。装完请重新登录。
+`setup.sh`：apt 依赖、`.venv`、下载模型、可选 input 组 / ydotoold，并安装**应用菜单项**与 `~/.local/bin/voice-type`。装完请重新登录。
+
+退出后再开：应用菜单搜 `voice-type`，或新开终端执行 `voice-type`（不必再进项目目录）。若命令找不到，确认 `~/.local/bin` 在 PATH 里，或再跑一次：
+
+```bash
+bash scripts/install_linux_launchers.sh
+```
+
+在终端里启动时会**自动进后台**，关掉终端窗口不会把服务带掉；日志在 `~/.local/share/voice-type/voice-type.log`。若要盯着日志跑：`voice-type --foreground`。
 
 ### 2b. Windows（源码）
 
