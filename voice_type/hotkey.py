@@ -1,13 +1,14 @@
 """Toggle hotkey (press once to start, press again to stop).
 
-PTTStateMachine is pure logic (unit-tested). A clean tap of the hotkey (down then up,
-with no other key or mouse button in between) returns:
-    "start"  - first tap: begin recording
-    "stop"   - second tap: end recording, transcribe + insert
+PTTStateMachine is pure logic (unit-tested). A clean tap of the hotkey returns:
+    "start"  - on release while idle (so Alt+Tab / AltGr chords never start recording)
+    "stop"   - on press while recording (does not wait for release; avoids stuck
+               recording when the key-up event is dropped by the input stack)
 
 A chord (Right Alt+Tab, AltGr+key, Alt+click, or another modifier already held) is
-ignored and does not start or stop recording. Listeners never grab/suppress keys, so
-normal shortcuts keep working.
+ignored for *starting*. While recording, a bare hotkey press stops immediately;
+Alt+Tab during recording will therefore also stop (acceptable tradeoff vs getting stuck).
+Listeners never grab/suppress keys, so normal shortcuts keep working.
 
 Two listener backends:
     evdev  - reads /dev/input/event*; works on X11 *and* Wayland; user must be in group `input`.
@@ -28,24 +29,73 @@ IDLE, RECORDING = "idle", "recording"
 
 
 class PTTStateMachine:
-    def __init__(self, hotkey: str = "KEY_RIGHTALT", min_hold_ms: int = 0):
+    # If a non-hotkey "down" is seen but its "up" is lost (Bluetooth lag, remote
+    # desktop, flaky input), that key would forever mark every Alt tap as a combo
+    # and recording could not be stopped. Drop entries older than this.
+    OTHER_KEY_TTL_S = 3.0
+
+    def __init__(self, hotkey: str = "KEY_RIGHTALT", min_hold_ms: int = 0,
+                 other_key_ttl_s: float | None = None):
         self.hotkey = hotkey
         self.min_hold = min_hold_ms / 1000.0  # kept for config compatibility; toggle fires on release
+        self.other_key_ttl = self.OTHER_KEY_TTL_S if other_key_ttl_s is None else other_key_ttl_s
         self.state = IDLE
         self.hot_down = False
         self.combo = False
-        self.others_down: set[str] = set()
+        self._suppress_up = False  # ignore the real up after an eager stop
+        self.others_down: dict[str, float] = {}  # key -> monotonic time of last down
+
+    def _prune_others(self, t: float) -> None:
+        if self.other_key_ttl <= 0 or not self.others_down:
+            return
+        ttl = self.other_key_ttl
+        stale = [k for k, t0 in self.others_down.items() if t - t0 > ttl]
+        for k in stale:
+            log.debug("dropping stale other key %s (held > %.1fs, likely missed up)", k, ttl)
+            del self.others_down[k]
+
+    def _toggle(self) -> str | None:
+        if self.state == IDLE:
+            self.state = RECORDING
+            return "start"
+        if self.state == RECORDING:
+            self.state = IDLE
+            return "stop"
+        return None
 
     def feed(self, key: str, down: bool, t: float | None = None, repeat: bool = False) -> str | None:
         """key: evdev-style name (KEY_A, BTN_LEFT, ...). Returns an action or None."""
+        now = time.monotonic() if t is None else t
         if key == self.hotkey:
             if repeat:
                 return None
             if down:
+                # Previous eager-stop's up never arrived — don't let suppress_up
+                # eat the release of this new tap.
+                if self._suppress_up:
+                    self._suppress_up = False
+                # Missed a previous release while still armed.
                 if self.hot_down:
-                    return None
-                self.hot_down = True
+                    log.debug("hotkey down while already down; recovering from missed up")
+                    self.hot_down = False
+                    self.combo = False
+                    if self.state == RECORDING:
+                        self._suppress_up = True
+                        return self._toggle()
+                    # idle: fall through and re-arm for a fresh tap
+                self._prune_others(now)
                 self.combo = bool(self.others_down)
+                # Stop on press so a dropped key-up cannot leave us stuck recording.
+                if self.state == RECORDING and not self.combo:
+                    self.hot_down = False
+                    self._suppress_up = True
+                    return self._toggle()
+                self.hot_down = True
+                return None
+            if self._suppress_up:
+                self._suppress_up = False
+                self.hot_down = False
+                self.combo = False
                 return None
             if not self.hot_down:
                 return None
@@ -53,20 +103,17 @@ class PTTStateMachine:
             was_combo = self.combo
             self.combo = False
             if was_combo:
+                log.debug("hotkey tap ignored (chord with %s)",
+                          sorted(self.others_down) or "earlier key")
                 return None
-            if self.state == IDLE:
-                self.state = RECORDING
-                return "start"
-            if self.state == RECORDING:
-                self.state = IDLE
-                return "stop"
-            return None
+            # Only start (or legacy stop) on release; stop normally happens on press.
+            return self._toggle()
         if down and not repeat:
-            self.others_down.add(key)
+            self.others_down[key] = now
             if self.hot_down:
                 self.combo = True
         elif not down:
-            self.others_down.discard(key)
+            self.others_down.pop(key, None)
         return None
 
 

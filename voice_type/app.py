@@ -43,9 +43,12 @@ class App:
                 try:
                     self.rec.start()
                 except Exception as e:
+                    # State machine already flipped to RECORDING on the tap; roll it
+                    # back so the next Alt is "start" again instead of a no-op stop.
+                    self.sm.state = "idle"
                     self.status("error", f"麦克风打开失败: {e}")
                     return
-                self.status("recording", "再按一次结束")
+                self.status("recording", "再按一下结束")
             elif act == "cancel":
                 self._session += 1
                 if self.rec.active:
