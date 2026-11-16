@@ -31,6 +31,11 @@ def main(argv=None) -> int:
     p.add_argument("--check", action="store_true", help="检查环境 (按键权限/麦克风/插入工具/模型)")
     p.add_argument("--fake-audio", metavar="WAV", help="试运行: 不用麦克风，每次按键都用这个 wav 当录音")
     p.add_argument("--list-devices", action="store_true", help="列出音频输入设备")
+    p.add_argument(
+        "--foreground", "-f",
+        action="store_true",
+        help="前台运行（默认在终端启动时会进后台，关终端不影响）",
+    )
     p.add_argument("--version", action="version", version=__version__)
     a = p.parse_args(argv)
 
@@ -77,6 +82,29 @@ def main(argv=None) -> int:
             from .inserter import Inserter
             print("inserted via:", Inserter(cfg).insert(clean))
         return 0
+
+    from .platform_util import daemonize, log_file_path, should_daemonize
+
+    if should_daemonize(foreground=a.foreground):
+        log_path = log_file_path()
+        print(
+            f"voice-type 已在后台运行（关闭此终端不会退出）。日志: {log_path}",
+            flush=True,
+        )
+        log.info("detaching from terminal; further logs → %s", log_path)
+        daemonize(log_path)
+        # Re-bind logging to the daemon's stdout (now the log file).
+        root = logging.getLogger()
+        for h in list(root.handlers):
+            root.removeHandler(h)
+        logging.basicConfig(
+            level=logging.DEBUG if a.verbose else logging.INFO,
+            format="%(asctime)s %(levelname)s %(message)s",
+            datefmt="%H:%M:%S",
+            force=True,
+        )
+        log = logging.getLogger("voice_type")
+        log.info("daemon ready (pid %s)", __import__("os").getpid())
 
     from .app import App
     App(cfg, asr, fake_audio=a.fake_audio).run()

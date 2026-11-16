@@ -61,7 +61,12 @@ if [[ $DO_PERM == 1 ]]; then
   echo ">> 请注销并重新登录一次，input 组权限才会生效。"
 fi
 
+echo "== launchers (app menu + voice-type 命令) =="
+bash scripts/install_linux_launchers.sh "$PWD"
+
 echo
 echo "== done =="
-echo "检查环境:  ./voice-type --check"
-echo "开始使用:  ./voice-type        (按一下右 Alt 开始说话，再按一下结束并输入)"
+echo "检查环境:  ./voice-type --check  或  voice-type --check"
+echo "开始使用:  应用菜单搜 voice-type，或终端执行 voice-type"
+echo "           （按一下右 Alt 开始说话，再按一下结束并输入）"
+echo "退出后再开: 同样从应用菜单或终端 voice-type 启动即可"
